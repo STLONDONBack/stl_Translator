@@ -1,125 +1,52 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Live Translator with Speaker Recognition</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Translation</title>
   <style>
-    body { font-family: Arial; background: #f7f7f7; padding: 20px; }
+    body { font-family: Arial, sans-serif; padding: 20px; background-color: #f9f9f9; }
     h2 { margin-bottom: 10px; }
-    #transcript, #enrollment, #controls, #nameInputs { margin-top: 20px; }
-    input, button { padding: 10px; margin: 5px 0; font-size: 16px; width: 100%; max-width: 400px; }
+    #transcript, #controls { margin-top: 20px; }
     #transcript { background: #fff; padding: 15px; border: 1px solid #ccc; height: 300px; overflow-y: scroll; white-space: pre-wrap; }
-    .speaker-button { margin: 5px; display: inline-block; }
+    select, button { padding: 10px; font-size: 16px; margin: 5px; }
   </style>
 </head>
 <body>
 
-<h2>🎙️ Live Multi-Speaker Urdu/English Translator</h2>
+<h2>🌍 Live Urdu ↔ English Translator</h2>
 
-<!-- Setup Speaker Count -->
-<div id="setup">
-  <label>How many speakers? (Max 5)</label><br>
-  <input type="number" id="speakerCount" min="1" max="5" />
-  <button onclick="setupNames()">Next</button>
+<div id="controls">
+  <label for="speakerSelect">Select Speaker:</label>
+  <select id="speakerSelect"></select>
+  <button onclick="startListening()">▶️ Start</button>
+  <button onclick="stopListening()">⏹ Stop</button>
 </div>
 
-<!-- Speaker Name Inputs -->
-<div id="nameInputs" style="display:none;"></div>
-
-<!-- Enrollment Section -->
-<div id="enrollment" style="display:none;">
-  <p><strong>Each speaker, click your button and say:</strong></p>
-  <p>"Hello, my name is [your name]. I enjoy learning new things, helping others, and hope to make a positive difference in the world through technology."</p>
-  <div id="enrollButtons"></div>
-</div>
-
-<!-- Live Translation Controls -->
-<div id="controls" style="display:none;">
-  <button onclick="startListening()">▶️ Start Listening</button>
-  <button onclick="stopListening()">⏹ Stop Listening</button>
-</div>
-
-<!-- Output -->
 <div id="transcript">Transcript will appear here...</div>
 
 <script>
-  let speakers = [];
-  let speakerOrder = [];
   let recognition;
   let listening = false;
-  let currentEnroll = 0;
+  let speakerList = JSON.parse(localStorage.getItem("speakerList")) || [];
 
-  function setupNames() {
-    const count = parseInt(document.getElementById("speakerCount").value);
-    if (isNaN(count) || count < 1 || count > 5) {
-      alert("Enter a number between 1 and 5.");
-      return;
-    }
+  const speakerSelect = document.getElementById("speakerSelect");
+  const transcriptBox = document.getElementById("transcript");
 
-    const nameInputs = document.getElementById("nameInputs");
-    nameInputs.innerHTML = "<h4>Enter Speaker Names:</h4>";
-    for (let i = 0; i < count; i++) {
-      nameInputs.innerHTML += `<input type="text" id="speaker${i}" placeholder="Speaker ${i + 1}" />`;
-    }
-    nameInputs.innerHTML += `<button onclick="confirmNames(${count})">Confirm</button>`;
-    nameInputs.style.display = "block";
-  }
-
-  function confirmNames(count) {
-    speakers = [];
-    for (let i = 0; i < count; i++) {
-      const name = document.getElementById(`speaker${i}`).value.trim();
-      if (!name) return alert("Please fill all names.");
-      speakers.push(name);
-    }
-
-    const enrollSection = document.getElementById("enrollment");
-    const buttons = document.getElementById("enrollButtons");
-    buttons.innerHTML = "";
-    speakers.forEach((name, index) => {
-      buttons.innerHTML += `<button class="speaker-button" onclick="enrollSpeaker(${index})">🎙️ Record ${name}</button>`;
-    });
-
-    document.getElementById("setup").style.display = "none";
-    document.getElementById("nameInputs").style.display = "none";
-    enrollSection.style.display = "block";
-  }
-
-  function enrollSpeaker(index) {
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-      alert("Speech Recognition not supported.");
-      return;
-    }
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const enrollRecog = new SpeechRecognition();
-    enrollRecog.continuous = false;
-    enrollRecog.interimResults = false;
-    enrollRecog.lang = 'en-US';
-
-    appendText(`🎙️ ${speakers[index]}: Speak now...`);
-
-    enrollRecog.onresult = () => {
-      speakerOrder.push(speakers[index]);
-      appendText(`✅ ${speakers[index]}'s voice enrolled.`);
-      document.querySelectorAll(".speaker-button")[index].disabled = true;
-
-      if (speakerOrder.length === speakers.length) {
-        document.getElementById("enrollment").style.display = "none";
-        document.getElementById("controls").style.display = "block";
-        appendText(`✅ All speakers enrolled. Ready to start listening.`);
-      }
-    };
-
-    enrollRecog.onerror = (e) => {
-      appendText(`❌ Error enrolling ${speakers[index]}: ${e.error}`);
-    };
-
-    enrollRecog.start();
-  }
+  // Populate speaker dropdown
+  speakerList.forEach(name => {
+    const option = document.createElement("option");
+    option.value = name;
+    option.textContent = name;
+    speakerSelect.appendChild(option);
+  });
 
   function startListening() {
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+      alert("Speech Recognition not supported in your browser.");
+      return;
+    }
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     recognition = new SpeechRecognition();
     recognition.continuous = true;
@@ -128,10 +55,10 @@
 
     recognition.onresult = async (event) => {
       const transcript = event.results[event.resultIndex][0].transcript.trim();
-      const speaker = speakerOrder[currentEnroll % speakerOrder.length];
-      currentEnroll++;
+      const speaker = speakerSelect.value;
 
       appendText(`👤 [${speaker}]: ${transcript}`);
+
       const translated = await translateText(transcript);
       appendText(`🌍 [${speaker} - ${translated.langName}]: ${translated.text}\n`);
     };
@@ -154,14 +81,13 @@
   }
 
   function appendText(text) {
-    const box = document.getElementById("transcript");
-    box.innerText += text + "\n";
-    box.scrollTop = box.scrollHeight;
+    transcriptBox.innerText += text + "\\n";
+    transcriptBox.scrollTop = transcriptBox.scrollHeight;
   }
 
   async function translateText(text) {
     try {
-      const res = await fetch("https://libretranslate.com/translate", {
+      const response = await fetch("https://libretranslate.com/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -171,12 +97,12 @@
           format: "text"
         })
       });
-      const data = await res.json();
+      const data = await response.json();
       return {
         text: data.translatedText,
         langName: detectLang(text) === "ur" ? "English" : "Urdu"
       };
-    } catch {
+    } catch (err) {
       return { text: "[Translation failed]", langName: "" };
     }
   }
@@ -188,3 +114,4 @@
 
 </body>
 </html>
+
