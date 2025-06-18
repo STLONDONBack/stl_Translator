@@ -3,37 +3,43 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Multilingual Live Translator Notepad</title>
+  <title>Live Speaker Translator</title>
   <style>
-    body { font-family: Arial; padding: 20px; background-color: #f0f0f0; }
-    #setup, #output, #controls { margin-top: 20px; }
-    input { padding: 8px; margin: 5px 0; width: 100%; }
-    button { padding: 10px 20px; font-size: 16px; margin: 10px 5px 0 0; }
-    #transcript { white-space: pre-wrap; background: #fff; padding: 15px; border: 1px solid #ccc; height: 300px; overflow-y: scroll; }
+    body { font-family: Arial; padding: 20px; background: #f0f0f0; }
+    h2 { margin-bottom: 10px; }
+    #output, #setup, #enroll, #controls { margin-top: 20px; }
+    input, select, button { padding: 10px; font-size: 16px; margin: 8px 0; width: 100%; max-width: 400px; }
+    #transcript { background: white; padding: 15px; border: 1px solid #ccc; height: 300px; overflow-y: scroll; white-space: pre-wrap; }
+    button { width: auto; }
   </style>
 </head>
 <body>
 
 <h2>🎙️ Live Urdu/English Translator with Speaker Labels</h2>
 
+<!-- Setup Step -->
 <div id="setup">
   <label>How many speakers (max 5)?</label>
   <input type="number" id="speakerCount" min="1" max="5" />
   <button onclick="setupSpeakerInputs()">Next</button>
 </div>
 
+<!-- Name Inputs -->
 <div id="nameInputs" style="display:none;"></div>
 
-<div id="sentencePrompt" style="display:none;">
-  <p>Each speaker should say: <strong>"Abdullah is the best future Developer"</strong></p>
+<!-- Enrollment Step -->
+<div id="enroll" style="display:none;">
+  <p><strong>Each speaker should read:</strong> "Abdullah is the best future Developer"</p>
   <button onclick="startSession()">Start Session</button>
 </div>
 
+<!-- Controls -->
 <div id="controls" style="display:none;">
   <button onclick="startListening()">▶️ Start Listening</button>
   <button onclick="stopListening()">⏹️ Stop Listening</button>
 </div>
 
+<!-- Output -->
 <div id="output">
   <div id="transcript">Transcript will appear here...</div>
 </div>
@@ -45,5 +51,111 @@
   let listening = false;
 
   function setupSpeakerInputs() {
-    const count = parseInt(document.getElementById("speakerCou
+    const count = parseInt(document.getElementById("speakerCount").value);
+    if (isNaN(count) || count < 1 || count > 5) {
+      alert("Please enter a number between 1 and 5.");
+      return;
+    }
 
+    const container = document.getElementById("nameInputs");
+    container.innerHTML = "<h4>Enter speaker names:</h4>";
+    for (let i = 0; i < count; i++) {
+      container.innerHTML += `<input type="text" id="speaker${i}" placeholder="Speaker ${i + 1} name" />`;
+    }
+    container.innerHTML += `<button onclick="confirmNames(${count})">Confirm</button>`;
+    container.style.display = "block";
+  }
+
+  function confirmNames(count) {
+    speakers = [];
+    for (let i = 0; i < count; i++) {
+      const name = document.getElementById(`speaker${i}`).value.trim();
+      if (!name) return alert("Please fill all names.");
+      speakers.push(name);
+    }
+    document.getElementById("enroll").style.display = "block";
+  }
+
+  function startSession() {
+    document.getElementById("setup").style.display = "none";
+    document.getElementById("nameInputs").style.display = "none";
+    document.getElementById("enroll").style.display = "none";
+    document.getElementById("controls").style.display = "block";
+    document.getElementById("transcript").innerText = "✅ Session started. Press 'Start Listening'...";
+  }
+
+  function startListening() {
+    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+      alert("Speech Recognition not supported in this browser.");
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.lang = 'ur-PK';
+
+    recognition.onresult = async (event) => {
+      const transcript = event.results[event.resultIndex][0].transcript.trim();
+      const speaker = speakers[currentSpeakerIndex % speakers.length];
+      currentSpeakerIndex++;
+
+      appendText(`👤 [${speaker}]: ${transcript}`);
+      const translated = await translateText(transcript);
+      appendText(`🌍 [${speaker} - ${translated.langName}]: ${translated.text}\n`);
+    };
+
+    recognition.onerror = (e) => {
+      appendText(`❌ Error: ${e.error}`);
+    };
+
+    recognition.start();
+    listening = true;
+    appendText("🎧 Listening started...\n");
+  }
+
+  function stopListening() {
+    if (recognition && listening) {
+      recognition.stop();
+      listening = false;
+      appendText("⏹️ Listening stopped.");
+    }
+  }
+
+  function appendText(text) {
+    const box = document.getElementById("transcript");
+    box.innerText += text + "\n";
+    box.scrollTop = box.scrollHeight;
+  }
+
+  async function translateText(text) {
+    try {
+      const res = await fetch("https://libretranslate.com/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          q: text,
+          source: "auto",
+          target: detectLang(text) === "ur" ? "en" : "ur",
+          format: "text"
+        })
+      });
+      const data = await res.json();
+      return {
+        text: data.translatedText,
+        langName: detectLang(text) === "ur" ? "English" : "Urdu"
+      };
+    } catch (e) {
+      return { text: "[Translation failed]", langName: "" };
+    }
+  }
+
+  function detectLang(text) {
+    const urduPattern = /[؀-ۿ]/;
+    return urduPattern.test(text) ? "ur" : "en";
+  }
+</script>
+
+</body>
+</html>
