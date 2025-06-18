@@ -1,53 +1,84 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Live Translation</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>All-in-One Live Translator</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; background-color: #f9f9f9; }
-    h2 { margin-bottom: 10px; }
-    #transcript, #controls { margin-top: 20px; }
-    #transcript { background: #fff; padding: 15px; border: 1px solid #ccc; height: 300px; overflow-y: scroll; white-space: pre-wrap; }
-    select, button { padding: 10px; font-size: 16px; margin: 5px; }
+    body { font-family: Arial, sans-serif; background: #f7f7f7; padding: 20px; }
+    h2, h3 { margin-bottom: 10px; }
+    input, select, button { padding: 10px; font-size: 16px; margin: 5px 0; width: 100%; max-width: 400px; }
+    #transcript { background: #fff; padding: 15px; border: 1px solid #ccc; height: 300px; overflow-y: auto; white-space: pre-wrap; margin-top: 20px; }
+    #controls, #setupSection, #translateSection { margin-top: 20px; }
   </style>
 </head>
 <body>
 
 <h2>🌍 Live Urdu ↔ English Translator</h2>
 
-<div id="controls">
-  <label for="speakerSelect">Select Speaker:</label>
-  <select id="speakerSelect"></select>
-  <button onclick="startListening()">▶️ Start</button>
-  <button onclick="stopListening()">⏹ Stop</button>
+<!-- Setup Section -->
+<div id="setupSection">
+  <label>How many speakers? (Max 5)</label><br>
+  <input type="number" id="speakerCount" min="1" max="5" />
+  <button onclick="setupNames()">Next</button>
+
+  <div id="nameInputs"></div>
 </div>
 
+<!-- Translation Section -->
+<div id="translateSection" style="display:none;">
+  <h3>Select Speaker:</h3>
+  <select id="speakerSelect"></select>
+  <div id="controls">
+    <button onclick="startListening()">▶️ Start</button>
+    <button onclick="stopListening()">⏹ Stop</button>
+  </div>
+</div>
+
+<!-- Transcript Output -->
 <div id="transcript">Transcript will appear here...</div>
 
 <script>
   let recognition;
   let listening = false;
-  let speakerList = JSON.parse(localStorage.getItem("speakerList")) || [];
+  let speakers = [];
 
-  const speakerSelect = document.getElementById("speakerSelect");
-  const transcriptBox = document.getElementById("transcript");
-
-  // Populate speaker dropdown
-  speakerList.forEach(name => {
-    const option = document.createElement("option");
-    option.value = name;
-    option.textContent = name;
-    speakerSelect.appendChild(option);
-  });
-
-  function startListening() {
-    if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
-      alert("Speech Recognition not supported in your browser.");
+  function setupNames() {
+    const count = parseInt(document.getElementById("speakerCount").value);
+    if (isNaN(count) || count < 1 || count > 5) {
+      alert("Enter a number between 1 and 5.");
       return;
     }
 
+    const nameInputs = document.getElementById("nameInputs");
+    nameInputs.innerHTML = "<h3>Enter Speaker Names:</h3>";
+    for (let i = 0; i < count; i++) {
+      nameInputs.innerHTML += `<input type="text" id="speaker${i}" placeholder="Speaker ${i + 1}" /><br>`;
+    }
+    nameInputs.innerHTML += `<button onclick="confirmNames(${count})">Confirm</button>`;
+  }
+
+  function confirmNames(count) {
+    speakers = [];
+    const speakerSelect = document.getElementById("speakerSelect");
+    speakerSelect.innerHTML = "";
+    for (let i = 0; i < count; i++) {
+      const name = document.getElementById(\`speaker\${i}\`).value.trim();
+      if (!name) return alert("Please fill all names.");
+      speakers.push(name);
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      speakerSelect.appendChild(option);
+    }
+    document.getElementById("setupSection").style.display = "none";
+    document.getElementById("translateSection").style.display = "block";
+  }
+
+  function startListening() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return alert("Speech Recognition not supported.");
+    
     recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = false;
@@ -55,39 +86,39 @@
 
     recognition.onresult = async (event) => {
       const transcript = event.results[event.resultIndex][0].transcript.trim();
-      const speaker = speakerSelect.value;
-
-      appendText(`👤 [${speaker}]: ${transcript}`);
+      const speaker = document.getElementById("speakerSelect").value;
+      appendText(\`👤 [\${speaker}]: \${transcript}\`);
 
       const translated = await translateText(transcript);
-      appendText(`🌍 [${speaker} - ${translated.langName}]: ${translated.text}\n`);
+      appendText(\`🌍 [\${speaker} - \${translated.langName}]: \${translated.text}\\n\`);
     };
 
     recognition.onerror = (e) => {
-      appendText(`❌ Error: ${e.error}`);
+      appendText("❌ Error: " + e.error);
     };
 
     recognition.start();
     listening = true;
-    appendText("🎧 Listening started...\n");
+    appendText("🎧 Listening started...\\n");
   }
 
   function stopListening() {
     if (recognition && listening) {
       recognition.stop();
       listening = false;
-      appendText("⏹ Listening stopped.");
+      appendText("⏹ Listening stopped.\\n");
     }
   }
 
   function appendText(text) {
-    transcriptBox.innerText += text + "\\n";
-    transcriptBox.scrollTop = transcriptBox.scrollHeight;
+    const box = document.getElementById("transcript");
+    box.innerText += text + "\\n";
+    box.scrollTop = box.scrollHeight;
   }
 
   async function translateText(text) {
     try {
-      const response = await fetch("https://libretranslate.com/translate", {
+      const res = await fetch("https://libretranslate.com/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -97,12 +128,12 @@
           format: "text"
         })
       });
-      const data = await response.json();
+      const data = await res.json();
       return {
         text: data.translatedText,
         langName: detectLang(text) === "ur" ? "English" : "Urdu"
       };
-    } catch (err) {
+    } catch {
       return { text: "[Translation failed]", langName: "" };
     }
   }
@@ -114,4 +145,5 @@
 
 </body>
 </html>
+
 
