@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Live Urdu/English Translator</title>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    #output { width: 100%; height: 300px; border: 1px solid #ccc; padding: 10px; overflow-y: scroll; white-space: pre-wrap; }
+    button { margin-top: 10px; padding: 10px 20px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h2>🎤 Live Urdu/English Translator</h2>
+  <div id="output">Click "Start" and speak in Urdu or English...</div>
+  <button onclick="startListening()">Start</button>
+
+  <script>
+    const output = document.getElementById('output');
+
+    function startListening() {
+      const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      recognition.continuous = true;
+      recognition.lang = 'ur-PK'; // Detect Urdu & English
+
+      recognition.onresult = async (event) => {
+        const transcript = event.results[event.resultIndex][0].transcript;
+        output.innerHTML += `👂 You: ${transcript}\n`;
+        translateText(transcript);
+      };
+
+      recognition.onerror = (e) => {
+        output.innerHTML += `⚠️ Error: ${e.error}\n`;
+      };
+
+      recognition.start();
+      output.innerHTML += `🎙️ Listening...\n`;
+    }
+
+    async function translateText(text) {
+      try {
+        const res = await fetch("https://libretranslate.com/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            q: text,
+            source: "auto",
+            target: "en",
+            format: "text"
+          })
+        });
+        const data = await res.json();
+        output.innerHTML += `🌍 Translated: ${data.translatedText}\n\n`;
+        output.scrollTop = output.scrollHeight;
+      } catch (e) {
+        output.innerHTML += `❌ Translation failed\n`;
+      }
+    }
+  </script>
+</body>
+</html>
